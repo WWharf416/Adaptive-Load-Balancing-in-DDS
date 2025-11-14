@@ -1,6 +1,6 @@
 import random
 from node import Node
-from config import NUM_NODES, NUM_CHUNKS, MIGRATION_TIME
+import config  # <-- Use 'import config'
 from metrics import metrics
 
 
@@ -9,12 +9,14 @@ class Cluster:
     
     def __init__(self, env):
         self.env = env
-        self.nodes = [Node(env, i) for i in range(NUM_NODES)]
+        # Use config.VARIABLE
+        self.nodes = [Node(env, i) for i in range(config.NUM_NODES)]
         self.chunk_map = {}
         
         # Initial chunk distribution (round-robin)
-        for i in range(NUM_CHUNKS):
-            node_id = i % NUM_NODES
+        # Use config.VARIABLE
+        for i in range(config.NUM_CHUNKS):
+            node_id = i % config.NUM_NODES
             self.nodes[node_id].chunks.add(i)
             self.chunk_map[i] = node_id
         
@@ -65,7 +67,8 @@ class Cluster:
         self.chunks_in_migration.add(chunk_id)
 
         # Simulate migration time
-        yield self.env.timeout(MIGRATION_TIME)
+        # Use config.VARIABLE
+        yield self.env.timeout(config.MIGRATION_TIME)
 
         # Perform the actual migration
         if chunk_id in from_node.chunks:

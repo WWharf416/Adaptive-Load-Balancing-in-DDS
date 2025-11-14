@@ -1,7 +1,7 @@
 import random
 import simpy
 from metrics import metrics
-from config import PROCESSING_TIME_MS
+import config
 
 
 class Node:
@@ -18,11 +18,14 @@ class Node:
         start_time = self.env.now
 
         # Base processing time with small variance
-        processing_time_ms = PROCESSING_TIME_MS + random.uniform(-0.5, 0.5)
+        processing_time_ms = config.PROCESSING_TIME_MS + random.uniform(-0.5, 0.5)
         
-        # Queue depth increases processing time
-        queue_depth = len(self.proc_queue.queue)
-        processing_time_ms += queue_depth * 2
+        # --- THIS LINE WAS THE BUG CAUSING HIGH LATENCY ---
+        # The simpy.Resource already models queuing delay. Adding this
+        # created a positive feedback loop that made the system unstable.
+        # queue_depth = len(self.proc_queue.queue)
+        # processing_time_ms += queue_depth * 2
+        # --- END BUGFIX ---
 
         # Simulate processing
         with self.proc_queue.request() as req:

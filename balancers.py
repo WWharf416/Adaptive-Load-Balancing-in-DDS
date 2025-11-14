@@ -2,16 +2,7 @@
 import random
 import collections
 import numpy as np
-from config import (
-    REACTIVE_CHECK_INTERVAL,
-    REACTIVE_THRESHOLD,
-    PROACTIVE_CHECK_INTERVAL,
-    ALPHA,
-    GAMMA,
-    EPSILON,
-    MIGRATION_COST_PENALTY,
-    MAX_MIGRATIONS_PER_CYCLE,
-)
+import config
 from metrics import metrics
 
 
@@ -21,7 +12,7 @@ def reactive_balancer(env, cluster):
     chunks when threshold is exceeded.
     """
     while True:
-        yield env.timeout(REACTIVE_CHECK_INTERVAL)
+        yield env.timeout(config.REACTIVE_CHECK_INTERVAL) 
 
         loads = cluster.get_node_loads()
         if not loads:
@@ -33,7 +24,7 @@ def reactive_balancer(env, cluster):
         diff = loads[max_id] - loads[min_id]
 
         # Migrate if imbalance exceeds threshold
-        if diff > REACTIVE_THRESHOLD:
+        if diff > config.REACTIVE_THRESHOLD:
             from_node = cluster.nodes[max_id]
             to_node = cluster.nodes[min_id]
 
@@ -96,25 +87,29 @@ class ProLBR_Agent:
         loads = self.cluster.get_node_loads()
         imbalance = max(loads.values()) - min(loads.values()) if loads else 0
 
-        # Primary: Penalize imbalance directly (-1 per request of imbalance)
-        imbalance_penalty = -imbalance
+        # Primary: Penalize imbalance directly (-1.5 per request of imbalance)
+        imbalance_penalty = -imbalance * 1.5
 
         # Secondary: Check p99 latency
         recent = metrics.response_times[-1000:]
         if len(recent) < 200:
+            # Not enough data, just return imbalance penalty
             return imbalance_penalty
 
         p99 = np.percentile(recent, 99)
 
-        # Latency-based reward
-        if p99 < 15:
-            latency_reward = 10     # Excellent
-        elif p99 < 25:
-            latency_reward = 5      # Good
+        # New, more granular latency-based reward
+        # The goal is to keep p99 under 50ms
+        if p99 < 30:
+            latency_reward = 15     # Excellent
         elif p99 < 50:
+            latency_reward = 5      # Good (Target)
+        elif p99 < 100:
             latency_reward = -5     # High
-        else:
+        elif p99 < 200:
             latency_reward = -10    # Very high
+        else:
+            latency_reward = -20    # Critical
 
         return imbalance_penalty + latency_reward
 
@@ -135,12 +130,12 @@ class ProLBR_Agent:
 
             # Q-learning update: Q(s,a) += α[r + γ·max Q(s',a') - Q(s,a)]
             best_q = np.max(self.q_table[state])
-            self.q_table[last_state][last_action] += ALPHA * (
-                reward + GAMMA * best_q - self.q_table[last_state][last_action]
+            self.q_table[last_state][last_action] += config.ALPHA * (
+                reward + config.GAMMA * best_q - self.q_table[last_state][last_action]
             )
 
             # Epsilon-greedy action selection
-            if random.random() < EPSILON:
+            if random.random() < config.EPSILON:
                 action = random.randint(0, 1)  # Explore
             else:
                 action = int(np.argmax(self.q_table[state]))  # Exploit
@@ -164,14 +159,14 @@ class ProLBR_Agent:
 
                         if available:
                             # Migrate up to MAX_MIGRATIONS_PER_CYCLE chunks
-                            chunks_to_move = available[:MAX_MIGRATIONS_PER_CYCLE]
+                            chunks_to_move = available[:config.MAX_MIGRATIONS_PER_CYCLE]
 
                             for chunk in chunks_to_move:
                                 self.env.process(self.cluster.migrate_chunk(
                                     chunk, from_node, to_node, 'proactive'))
-                                last_cost += MIGRATION_COST_PENALTY
+                                last_cost += config.MIGRATION_COST_PENALTY
 
             last_state = state
             last_action = action
 
-            yield self.env.timeout(PROACTIVE_CHECK_INTERVAL)
+            yield self.env.timeout(config.PROACTIVE_CHECK_INTERVAL)

@@ -2,13 +2,7 @@ import random
 import numpy as np
 import simpy
 
-from config import (
-    RANDOM_SEED,
-    SIM_TIME,
-    NUM_NODES,
-    PROCESSING_TIME_MS,
-    REQUEST_RATE,
-)
+import config
 from cluster import Cluster
 from workload import workload_generator
 from balancers import reactive_balancer, ProLBR_Agent
@@ -22,8 +16,8 @@ def run_simulation(balancer_type):
     print(f"{'='*65}")
 
     # Set random seeds for reproducibility
-    random.seed(RANDOM_SEED)
-    np.random.seed(RANDOM_SEED)
+    random.seed(config.RANDOM_SEED)
+    np.random.seed(config.RANDOM_SEED)
 
     # Reset metrics for this run
     metrics.reset()
@@ -50,7 +44,7 @@ def run_simulation(balancer_type):
     env.process(logger(env))
 
     # Run simulation
-    env.run(until=SIM_TIME)
+    env.run(until=config.SIM_TIME)
     
     # Generate final report
     metrics.report(balancer_type)
@@ -95,19 +89,21 @@ if __name__ == '__main__':
     print("="*65)
     print("\nScenario:")
     
-    node_capacity = 1000 / PROCESSING_TIME_MS
-    total_capacity = NUM_NODES * node_capacity
-    utilization = (REQUEST_RATE / total_capacity) * 100
+    node_capacity = 1000 / config.PROCESSING_TIME_MS
+    total_capacity = config.NUM_NODES * node_capacity
+    utilization = (config.REQUEST_RATE / total_capacity) * 100
     
-    print(f"  • {NUM_NODES} nodes @ {node_capacity:.0f} req/s each "
+    print(f"  • {config.NUM_NODES} nodes @ {node_capacity:.0f} req/s each "
           f"(total capacity: {total_capacity:.0f} req/s)")
-    print(f"  • Incoming load: {REQUEST_RATE} req/s "
+    print(f"  • Incoming load: {config.REQUEST_RATE} req/s "
           f"({utilization:.0f}% utilization)")
     print("  • 35% of traffic goes to shifting hotspot")
     print("  • Hotspot shifts every 150 seconds")
     print("\nBalancers:")
-    print("  • REACTIVE: Checks every 45s, migrates if imbalance > 6")
-    print("  • PROACTIVE: Checks every 10s, learns via Q-learning")
+    print(f"  • REACTIVE: Checks every {config.REACTIVE_CHECK_INTERVAL}s, "
+          f"migrates if imbalance > {config.REACTIVE_THRESHOLD}")
+    print(f"  • PROACTIVE: Checks every {config.PROACTIVE_CHECK_INTERVAL}s, "
+          "learns via Q-learning")
     print("\n" + "="*65)
 
     # Run both simulations

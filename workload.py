@@ -1,5 +1,5 @@
 import random
-from config import REQUEST_RATE, NUM_CHUNKS
+import config  # <-- Use 'import config'
 
 
 def workload_generator(env, cluster):
@@ -33,11 +33,13 @@ def workload_generator(env, cluster):
         if random.random() < 0.35:
             chunk_id = random.choice(hot_list)
         else:
-            chunk_id = random.randint(0, NUM_CHUNKS - 1)
+            # Use config.VARIABLE
+            chunk_id = random.randint(0, config.NUM_CHUNKS - 1)
 
         # Route request to appropriate node
         node = cluster.get_node_for_chunk(chunk_id)
         env.process(node.process_request({}))
 
         # Inter-arrival time based on Poisson process
-        yield env.timeout(1.0 / REQUEST_RATE)
+        # Use config.VARIABLE
+        yield env.timeout(1.0 / config.REQUEST_RATE)
