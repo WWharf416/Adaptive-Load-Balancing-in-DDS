@@ -102,8 +102,12 @@ if __name__ == '__main__':
     print("\nBalancers:")
     print(f"  • REACTIVE: Checks every {config.REACTIVE_CHECK_INTERVAL}s, "
           f"migrates if imbalance > {config.REACTIVE_THRESHOLD}")
+    
+    # --- MODIFIED: Print the parameters being used ---
     print(f"  • PROACTIVE: Checks every {config.PROACTIVE_CHECK_INTERVAL}s, "
-          "learns via Q-learning")
+          f"learns via Q-learning (A={config.ALPHA}, G={config.GAMMA}, E={config.EPSILON})")
+    print(f"               (State: 4D w/ velocity, PenaltyFactor: {config.IMBALANCE_PENALTY_FACTOR})")
+    
     print("\n" + "="*65)
 
     # Run both simulations

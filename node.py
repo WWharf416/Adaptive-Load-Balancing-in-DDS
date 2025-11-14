@@ -1,5 +1,6 @@
 import random
 import simpy
+import collections
 from metrics import metrics
 import config
 
@@ -12,26 +13,25 @@ class Node:
         self.node_id = node_id
         self.proc_queue = simpy.Resource(env, capacity=1)
         self.chunks = set()
+        
+        # --- NEW: Track requests per chunk for intelligent migration ---
+        self.chunk_request_counts = collections.defaultdict(int)
 
-    def process_request(self, request):
+    def process_request(self, chunk_id):
         """Process a request with queuing and timing"""
         start_time = self.env.now
+        
+        # --- NEW: Record request for this chunk ---
+        self.chunk_request_counts[chunk_id] += 1
 
         # Base processing time with small variance
         processing_time_ms = config.PROCESSING_TIME_MS + random.uniform(-0.5, 0.5)
-        
-        # --- THIS LINE WAS THE BUG CAUSING HIGH LATENCY ---
-        # The simpy.Resource already models queuing delay. Adding this
-        # created a positive feedback loop that made the system unstable.
-        # queue_depth = len(self.proc_queue.queue)
-        # processing_time_ms += queue_depth * 2
-        # --- END BUGFIX ---
 
         # Simulate processing
         with self.proc_queue.request() as req:
             yield req
-            # Convert ms to seconds and add small delay for context switching
-            yield self.env.timeout((processing_time_ms / 1000.0) + 0.0001)
+            # Convert ms to seconds
+            yield self.env.timeout(processing_time_ms / 1000.0)
 
         end_time = self.env.now
         response_time_ms = (end_time - start_time) * 1000.0

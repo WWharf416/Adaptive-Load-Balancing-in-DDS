@@ -1,6 +1,7 @@
-"""Load balancing strategies: Reactive and Proactive (Q-learning)"""
+"""
+Contains the Reactive Balancer and the Base Class for RL Balancers.
+"""
 import random
-import collections
 import numpy as np
 import config
 from metrics import metrics
@@ -9,7 +10,7 @@ from metrics import metrics
 def reactive_balancer(env, cluster):
     """
     Reactive balancer: Periodically checks for imbalance and migrates
-    chunks when threshold is exceeded.
+    the *hottest* chunk when threshold is exceeded.
     """
     while True:
         yield env.timeout(config.REACTIVE_CHECK_INTERVAL) 
@@ -18,155 +19,136 @@ def reactive_balancer(env, cluster):
         if not loads:
             continue
 
-        # Find most and least loaded nodes
         max_id = max(loads, key=loads.get)
         min_id = min(loads, key=loads.get)
         diff = loads[max_id] - loads[min_id]
 
-        # Migrate if imbalance exceeds threshold
         if diff > config.REACTIVE_THRESHOLD:
             from_node = cluster.nodes[max_id]
             to_node = cluster.nodes[min_id]
 
-            # Find chunks that can be migrated (not on cooldown)
-            available = [c for c in from_node.chunks 
-                        if cluster.can_migrate_chunk(c)]
+            # --- MODIFIED: Migrate hottest chunk, not random ---
+            chunk_to_move = cluster.get_hottest_chunk(from_node.node_id)
             
-            if available:
-                chunk = random.choice(available)
+            if chunk_to_move is not None:
                 env.process(cluster.migrate_chunk(
-                    chunk, from_node, to_node, 'reactive'))
+                    chunk_to_move, from_node, to_node, 'reactive'))
 
 
-class ProLBR_Agent:
+class BaseRLAgent:
     """
-    Proactive Q-learning agent that learns optimal migration policies
+    Base class for Proactive Q-Learning and DQN Agents.
+    Handles the simulation loop, state calculation, and reward logic.
     """
     
-    def __init__(self, env, cluster):
+    def __init__(self, env, cluster, balancer_type):
         self.env = env
         self.cluster = cluster
-        # Q-table: state -> [Q(s,do_nothing), Q(s,migrate)]
-        self.q_table = collections.defaultdict(lambda: np.zeros(2))
+        self.balancer_type = balancer_type
+        
+        # State tracking for velocity
+        self.last_max_load = 0
+        self.last_imbalance = 0
+        
+        # Main simulation process
         self.action = env.process(self.run())
 
-    def get_state(self):
-        """Discretize system state into (load_level, imbalance_level)"""
+    def get_raw_state(self):
+        """
+        Calculates the 4-dimensional continuous state of the system.
+        Returns: (max_load, imbalance, load_velocity, imbalance_velocity)
+        """
         loads = self.cluster.get_node_loads()
         if not loads:
-            return (1, 1)
-
-        max_load = max(loads.values())
-        imbalance = max(loads.values()) - min(loads.values())
-
-        # Discretize load level
-        if max_load <= 3:
-            load_lvl = 1
-        elif max_load <= 7:
-            load_lvl = 2
-        elif max_load <= 12:
-            load_lvl = 3
+            max_load, imbalance = 0, 0
         else:
-            load_lvl = 4
+            max_load = max(loads.values())
+            imbalance = max_load - min(loads.values())
 
-        # Discretize imbalance level
-        if imbalance <= 2:
-            imb_lvl = 1
-        elif imbalance <= 6:
-            imb_lvl = 2
-        else:
-            imb_lvl = 3
+        # Calculate velocity (diff from last step)
+        load_v = max_load - self.last_max_load
+        imb_v = imbalance - self.last_imbalance
+            
+        self.last_max_load = max_load
+        self.last_imbalance = imbalance
 
-        return (load_lvl, imb_lvl)
+        return np.array([max_load, imbalance, load_v, imb_v], dtype=np.float32)
 
     def get_reward(self):
         """
         Calculate reward based on load imbalance and latency.
-        Penalizes imbalance and high latency, rewards low latency.
         """
         loads = self.cluster.get_node_loads()
         imbalance = max(loads.values()) - min(loads.values()) if loads else 0
 
-        # Primary: Penalize imbalance directly (-1.5 per request of imbalance)
-        imbalance_penalty = -imbalance * 1.5
+        imbalance_penalty = -imbalance * config.IMBALANCE_PENALTY_FACTOR
 
-        # Secondary: Check p99 latency
         recent = metrics.response_times[-1000:]
         if len(recent) < 200:
-            # Not enough data, just return imbalance penalty
             return imbalance_penalty
 
         p99 = np.percentile(recent, 99)
 
-        # New, more granular latency-based reward
-        # The goal is to keep p99 under 50ms
-        if p99 < 30:
-            latency_reward = 15     # Excellent
-        elif p99 < 50:
-            latency_reward = 5      # Good (Target)
-        elif p99 < 100:
-            latency_reward = -5     # High
-        elif p99 < 200:
-            latency_reward = -10    # Very high
+        if p99 < config.LATENCY_REWARD_THRESH[0]:
+            latency_reward = config.LATENCY_REWARD_VALUES[0]
+        elif p99 < config.LATENCY_REWARD_THRESH[1]:
+            latency_reward = config.LATENCY_REWARD_VALUES[1]
+        elif p99 < config.LATENCY_REWARD_THRESH[2]:
+            latency_reward = config.LATENCY_REWARD_VALUES[2]
+        elif p99 < config.LATENCY_REWARD_THRESH[3]:
+            latency_reward = config.LATENCY_REWARD_VALUES[3]
         else:
-            latency_reward = -20    # Critical
+            latency_reward = config.LATENCY_REWARD_VALUES[4]
 
         return imbalance_penalty + latency_reward
 
+    def execute_action(self, action):
+        """
+        Executes the chosen action (0=Do Nothing, 1=Migrate).
+        Returns the cost (penalty) of this action.
+        """
+        if action == 0:
+            return 0  # No cost
+
+        # Action == 1: Migrate
+        loads = self.cluster.get_node_loads()
+        if not loads:
+            return 0
+
+        from_id = max(loads, key=loads.get)
+        from_node = self.cluster.nodes[from_id]
+        to_node = self.cluster.get_least_loaded_node()
+
+        diff = loads[from_id] - loads[to_node.node_id]
+
+        # Only migrate if imbalance is meaningful
+        if diff > 2:
+            cost = 0
+            for _ in range(config.MAX_MIGRATIONS_PER_CYCLE):
+                # --- MODIFIED: Migrate hottest chunk ---
+                chunk = self.cluster.get_hottest_chunk(from_node.node_id)
+                if chunk is not None:
+                    self.env.process(self.cluster.migrate_chunk(
+                        chunk, from_node, to_node, self.balancer_type))
+                    cost += config.MIGRATION_COST_PENALTY
+                else:
+                    break # No more migratable chunks
+            return cost
+        
+        return 0 # No migration occurred
+
     def run(self):
-        """Main Q-learning loop"""
-        # Warmup period
-        yield self.env.timeout(15)
+        """Main Q-learning loop, implemented by child classes"""
+        raise NotImplementedError
 
-        last_state = self.get_state()
-        last_action = 0
-        last_cost = 0
+    def get_state(self, raw_state):
+        """Convert raw state to agent-specific state (tuple or tensor)"""
+        raise NotImplementedError
 
-        while True:
-            state = self.get_state()
+    def choose_action(self, state):
+        """Choose an action based on the current state"""
+        raise NotImplementedError
 
-            # Calculate reward (subtract cost of last action)
-            reward = self.get_reward() - last_cost
-
-            # Q-learning update: Q(s,a) += α[r + γ·max Q(s',a') - Q(s,a)]
-            best_q = np.max(self.q_table[state])
-            self.q_table[last_state][last_action] += config.ALPHA * (
-                reward + config.GAMMA * best_q - self.q_table[last_state][last_action]
-            )
-
-            # Epsilon-greedy action selection
-            if random.random() < config.EPSILON:
-                action = random.randint(0, 1)  # Explore
-            else:
-                action = int(np.argmax(self.q_table[state]))  # Exploit
-
-            last_cost = 0
-
-            # Execute action: 0 = do nothing, 1 = migrate
-            if action == 1:
-                loads = self.cluster.get_node_loads()
-                if loads:
-                    from_id = max(loads, key=loads.get)
-                    from_node = self.cluster.nodes[from_id]
-                    to_node = self.cluster.get_least_loaded_node()
-
-                    diff = loads[from_id] - loads[to_node.node_id]
-
-                    # Only migrate if imbalance is meaningful
-                    if diff > 2 and from_node.chunks:
-                        available = [c for c in from_node.chunks 
-                                   if self.cluster.can_migrate_chunk(c)]
-
-                        if available:
-                            # Migrate up to MAX_MIGRATIONS_PER_CYCLE chunks
-                            chunks_to_move = available[:config.MAX_MIGRATIONS_PER_CYCLE]
-
-                            for chunk in chunks_to_move:
-                                self.env.process(self.cluster.migrate_chunk(
-                                    chunk, from_node, to_node, 'proactive'))
-                                last_cost += config.MIGRATION_COST_PENALTY
-
-            last_state = state
-            last_action = action
-
-            yield self.env.timeout(config.PROACTIVE_CHECK_INTERVAL)
+    def update_model(self, last_state, last_action, reward, new_state, done):
+        """Update the agent's model (Q-table or DQN)"""
+        raise NotImplementedError
