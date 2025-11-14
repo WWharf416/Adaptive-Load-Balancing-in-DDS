@@ -16,9 +16,9 @@ MIGRATION_TIME = 3              # seconds to complete migration
 
 # Proactive balancer parameters (Q-learning)
 PROACTIVE_CHECK_INTERVAL = 10   # seconds between checks
-ALPHA = 0.3                     # learning rate
-GAMMA = 0.7                     # discount factor
-EPSILON = 0.25                  # exploration rate
+ALPHA = 0.3                     # learning rate (This will be overridden by sweep script)
+GAMMA = 0.7                     # discount factor (This will be overridden by sweep script)
+EPSILON = 0.25                  # exploration rate (This will be overridden by sweep script)
 MIGRATION_COST_PENALTY = 2      # cost penalty for migrations
 MAX_MIGRATIONS_PER_CYCLE = 2    # max migrations per decision
 
