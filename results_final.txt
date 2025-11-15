@@ -1,0 +1,132 @@
+
+=================================================================
+PRO-LBR SIMULATION: 4-Way Balancer Comparison
+=================================================================
+
+Shared Scenario:
+  • 4 nodes @ 125 req/s each (total capacity: 500 req/s)
+  • Incoming load: 220 req/s (44% utilization)
+  • 35% of traffic goes to shifting hotspot (shifts every 150s)
+  • All balancers migrate the *hottest* available chunk.
+
+Balancers:
+  1. REACTIVE: Checks every 45s, migrates if imbalance > 5
+  2. Q-TABLE: Checks every 10s, (108 states, A=0.3, G=0.9, E=0.1)
+  3. Q-TABLE-LRG: Checks every 10s, (1400 states, same params)
+  4. DQN: Checks every 10s, (LR=0.0001, G=0.9, Epsilon-decay)
+
+=================================================================
+
+=================================================================
+RUNNING: REACTIVE BALANCER
+=================================================================
+  Workload: 35% hotspot concentration (CONCENTRATED), shifts every 150s
+  [REACTIVE] t=70s | p99=45.4ms | Q: max=1 min=0 avg=0.2 | Migs=0
+  [REACTIVE] t=140s | p99=62.0ms | Q: max=1 min=0 avg=0.2 | Migs=0
+  [REACTIVE] t=210s | p99=75.6ms | Q: max=4 min=0 avg=1.0 | Migs=0
+  [REACTIVE] t=280s | p99=56.1ms | Q: max=6 min=0 avg=1.5 | Migs=0
+  [REACTIVE] t=350s | p99=72.3ms | Q: max=1 min=0 avg=0.5 | Migs=0
+
+=================================================================
+FINAL RESULTS: REACTIVE
+=================================================================
+Completed Requests:  87,998
+Total Migrations:    0
+Average Latency:     16.15 ms
+p50 Latency:         10.34 ms
+p95 Latency:         45.36 ms
+p99 Latency:         69.21 ms
+p99.9 Latency:       105.25 ms
+Max Latency:         131.27 ms
+Steady-State p99:    65.33 ms
+Avg Load Imbalance:  1.9 requests
+Max Load Imbalance:  8.0 requests
+
+=================================================================
+RUNNING: Q_TABLE BALANCER
+=================================================================
+  Workload: 35% hotspot concentration (CONCENTRATED), shifts every 150s
+  [Q-TBL] t=70s | p99=27.6ms | Q: max=0 min=0 avg=0.0 | Migs=2
+  [Q-TBL] t=140s | p99=28.0ms | Q: max=1 min=0 avg=0.2 | Migs=2
+  [Q-TBL] t=210s | p99=75.6ms | Q: max=5 min=0 avg=1.2 | Migs=2
+  [Q-TBL] t=280s | p99=32.5ms | Q: max=0 min=0 avg=0.0 | Migs=4
+  [Q-TBL] t=350s | p99=82.7ms | Q: max=11 min=0 avg=2.8 | Migs=4
+
+=================================================================
+FINAL RESULTS: Q_TABLE
+=================================================================
+Completed Requests:  87,996
+Total Migrations:    6
+Average Latency:     14.67 ms
+p50 Latency:         8.47 ms
+p95 Latency:         41.80 ms
+p99 Latency:         66.80 ms
+p99.9 Latency:       99.21 ms
+Max Latency:         126.25 ms
+Steady-State p99:    53.63 ms
+Avg Load Imbalance:  1.9 requests
+Max Load Imbalance:  11.0 requests
+
+=================================================================
+RUNNING: Q_TABLE_LARGE BALANCER
+=================================================================
+  Workload: 35% hotspot concentration (CONCENTRATED), shifts every 150s
+  [Q_TABLE_LARGE] t=70s | p99=45.4ms | Q: max=1 min=0 avg=0.2 | Migs=0
+  [Q_TABLE_LARGE] t=140s | p99=28.0ms | Q: max=1 min=0 avg=0.2 | Migs=2
+  [Q_TABLE_LARGE] t=210s | p99=75.6ms | Q: max=5 min=0 avg=1.2 | Migs=2
+  [Q_TABLE_LARGE] t=280s | p99=32.5ms | Q: max=1 min=0 avg=0.2 | Migs=4
+  [Q_TABLE_LARGE] t=350s | p99=82.7ms | Q: max=11 min=0 avg=2.8 | Migs=4
+
+=================================================================
+FINAL RESULTS: Q_TABLE_LARGE
+=================================================================
+Completed Requests:  87,997
+Total Migrations:    6
+Average Latency:     14.93 ms
+p50 Latency:         8.49 ms
+p95 Latency:         42.48 ms
+p99 Latency:         67.09 ms
+p99.9 Latency:       99.21 ms
+Max Latency:         126.25 ms
+Steady-State p99:    53.83 ms
+Avg Load Imbalance:  2.0 requests
+Max Load Imbalance:  11.0 requests
+
+=================================================================
+RUNNING: DQN BALANCER
+=================================================================
+  Workload: 35% hotspot concentration (CONCENTRATED), shifts every 150s
+  [DQN] t=70s | p99=27.6ms | Q: max=0 min=0 avg=0.0 | Migs=4
+  [DQN] t=140s | p99=28.0ms | Q: max=0 min=0 avg=0.0 | Migs=4
+  [DQN] t=210s | p99=46.1ms | Q: max=0 min=0 avg=0.0 | Migs=8
+  [DQN] t=280s | p99=32.2ms | Q: max=0 min=0 avg=0.0 | Migs=8
+  [DQN] t=350s | p99=72.3ms | Q: max=3 min=0 avg=0.8 | Migs=8
+
+=================================================================
+FINAL RESULTS: DQN
+=================================================================
+Completed Requests:  87,988
+Total Migrations:    8
+Average Latency:     13.16 ms
+p50 Latency:         8.43 ms
+p95 Latency:         33.30 ms
+p99 Latency:         56.89 ms
+p99.9 Latency:       91.96 ms
+Max Latency:         122.68 ms
+Steady-State p99:    45.07 ms
+Avg Load Imbalance:  1.3 requests
+Max Load Imbalance:  5.0 requests
+
+=================================================================
+FINAL 4-WAY COMPARISON
+=================================================================
+         | Reactive   | Q-Table    | Q-Table-LRG | DQN (Advanced)
+---------|------------|------------|-------------|----------------
+Migs     | 0          | 6          | 6           | 8
+Steady p99| 65.33      | 53.63      | 53.83       | 45.07
+
+• Q-Table vs Reactive:   +17.9% improvement
+• Q-Large vs Reactive:   +17.6% improvement
+• DQN vs Reactive:       +31.0% improvement
+• Q-Large vs Q-Table:    -0.4% (Expected to be negative)
+=================================================================

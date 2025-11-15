@@ -41,19 +41,19 @@ LATENCY_REWARD_VALUES = [15, 5, -5, -10, -20]
 
 # --- 3. Q-Table Agent (Your Tuned Submission) ---
 # Best params from your sweep_results.csv
-Q_TABLE_ALPHA = 0.1       # learning rate
-Q_TABLE_GAMMA = 0.7       # discount factor
+Q_TABLE_ALPHA = 0.3       # learning rate
+Q_TABLE_GAMMA = 0.9       # discount factor
 Q_TABLE_EPSILON = 0.1     # exploration rate
 
 # --- 4. DQN Agent (Advanced) ---
 DQN_GAMMA = 0.9           # discount factor (higher for DQN)
 DQN_EPSILON_START = 1.0   # exploration start
 DQN_EPSILON_END = 0.05    # exploration end
-DQN_EPSILON_DECAY = 500   # steps to decay
+DQN_EPSILON_DECAY = 100   # steps to decay
 DQN_LEARNING_RATE = 1e-4  # learning rate for Adam optimizer
 DQN_BATCH_SIZE = 64       # samples from replay buffer
 DQN_REPLAY_BUFFER_SIZE = 10000
-DQN_TARGET_UPDATE = 10    # update target network every 10 steps
+DQN_TARGET_UPDATE = 5    # update target network every 10 steps
 
 # ====================================================================
 # --- METRICS & MONITORING ---

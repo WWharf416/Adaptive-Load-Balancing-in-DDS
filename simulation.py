@@ -5,12 +5,14 @@ import random
 import numpy as np
 import simpy
 import config
+import torch
 
 from cluster import Cluster
 from workload import workload_generator
 from metrics import metrics
 from balancers import reactive_balancer
 from q_table_agent import QTableAgent
+from q_table_large_agent import QTableLargeAgent  # <-- 1. NEW IMPORT
 from dqn_agent import DQNAgent
 
 def run_simulation(balancer_type):
@@ -22,6 +24,7 @@ def run_simulation(balancer_type):
     # Set random seeds for reproducibility
     random.seed(config.RANDOM_SEED)
     np.random.seed(config.RANDOM_SEED)
+    torch.manual_seed(config.RANDOM_SEED)
 
     # Reset metrics for this run
     metrics.reset()
@@ -38,6 +41,8 @@ def run_simulation(balancer_type):
         env.process(reactive_balancer(env, cluster))
     elif balancer_type == 'q_table':
         agent = QTableAgent(env, cluster)
+    elif balancer_type == 'q_table_large':  # <-- 2. NEW ELIF BLOCK
+        agent = QTableLargeAgent(env, cluster)
     elif balancer_type == 'dqn':
         agent = DQNAgent(env, cluster)
     else:
